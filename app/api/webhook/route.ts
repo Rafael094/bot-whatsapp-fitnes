@@ -44,9 +44,9 @@ export async function POST(req: Request) {
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      systemInstruction: systemInstruction,
-    });
+  model: 'gemini-1.5-flash',
+  systemInstruction: systemInstruction,
+});
 
     const result = await model.generateContent(userMessage);
     const botResponse = result.response.text();
