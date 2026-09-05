@@ -12,37 +12,34 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-// Configure o seu número de telefone pessoal com DDD (apenas números, ex: 554384026113)
-const MY_PHONE_NUMBER = '554384026113';
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Aceita apenas eventos de nova mensagem
+    console.log('--- NOVO EVENTO RECEBIDO ---');
+    console.log('Event:', body.event);
+    console.log('Data:', JSON.stringify(body.data));
+
     if (body.event !== 'messages.upsert') {
-      return NextResponse.json({ status: 'ignored' });
+      return NextResponse.json({ status: 'ignored_not_upsert' });
     }
 
-    const remoteJid = body.data?.key?.remoteJid || '';
     const isFromMe = body.data?.key?.fromMe;
-    const senderNumber = remoteJid.replace('@s.whatsapp.net', '');
+    const userMessage = body.data?.message?.conversation || 
+                       body.data?.message?.extendedTextMessage?.text;
 
-    // TRAVA DE SEGURANÇA PARA USO PESSOAL:
-    // Só processa se a mensagem for enviada na conversa 'Você' (consigo mesmo)
-    // Se outra pessoa mandar mensagem, o bot ignora totalmente para não interferir nas suas conversas.
-    const isNoteToSelf = isFromMe && senderNumber.includes(MY_PHONE_NUMBER);
-
-    if (!isNoteToSelf) {
-      return NextResponse.json({ status: 'ignored_external_user' });
-    }
-
-    const userMessage = body.data.message?.conversation || 
-                       body.data.message?.extendedTextMessage?.text;
-
+    // Se não houver mensagem de texto ou se não for enviada por você, ignora
     if (!userMessage) {
-      return NextResponse.json({ status: 'no_text' });
+      return NextResponse.json({ status: 'no_text_content' });
     }
+
+    if (!isFromMe) {
+      return NextResponse.json({ status: 'ignored_third_party_message' });
+    }
+
+    // Extrai o número do remetente original
+    const remoteJid = body.data?.key?.remoteJid || '';
+    const cleanNumber = remoteJid.split('@')[0];
 
     const systemPrompt = "Voce e um assistente pessoal de rotina fitness e nutricao focado no acompanhamento diario.\n" +
       "Perfil do usuario:\n" +
@@ -63,12 +60,14 @@ export async function POST(req: Request) {
 
     const botResponse = completion.choices[0].message.content;
 
-    const targetUrl = process.env.EVOLUTION_API_URL + '/message/sendText/' + process.env.EVOLUTION_INSTANCE_NAME;
+    const targetUrl = `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE_NAME}`;
+
+    console.log('Enviando resposta para:', cleanNumber);
 
     await axios.post(
       targetUrl,
       {
-        number: senderNumber,
+        number: cleanNumber,
         text: botResponse,
       },
       {
@@ -80,7 +79,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ status: 'success' });
   } catch (error: any) {
-    console.error('Erro no Webhook:', error?.response?.data || error.message);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Erro detalhado no Webhook:', error?.response?.data || error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
