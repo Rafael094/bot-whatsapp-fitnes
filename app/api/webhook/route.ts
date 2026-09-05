@@ -12,15 +12,31 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
+// Configure o seu número de telefone pessoal com DDD (apenas números, ex: 554384026113)
+const MY_PHONE_NUMBER = '554384026113';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    if (body.event !== 'messages.upsert' || body.data?.key?.fromMe) {
+    // Aceita apenas eventos de nova mensagem
+    if (body.event !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored' });
     }
 
-    const remoteJid = body.data.key.remoteJid;
+    const remoteJid = body.data?.key?.remoteJid || '';
+    const isFromMe = body.data?.key?.fromMe;
+    const senderNumber = remoteJid.replace('@s.whatsapp.net', '');
+
+    // TRAVA DE SEGURANÇA PARA USO PESSOAL:
+    // Só processa se a mensagem for enviada na conversa 'Você' (consigo mesmo)
+    // Se outra pessoa mandar mensagem, o bot ignora totalmente para não interferir nas suas conversas.
+    const isNoteToSelf = isFromMe && senderNumber.includes(MY_PHONE_NUMBER);
+
+    if (!isNoteToSelf) {
+      return NextResponse.json({ status: 'ignored_external_user' });
+    }
+
     const userMessage = body.data.message?.conversation || 
                        body.data.message?.extendedTextMessage?.text;
 
@@ -52,7 +68,7 @@ export async function POST(req: Request) {
     await axios.post(
       targetUrl,
       {
-        number: remoteJid.replace('@s.whatsapp.net', ''),
+        number: senderNumber,
         text: botResponse,
       },
       {
