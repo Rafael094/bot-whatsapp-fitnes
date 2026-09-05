@@ -42,9 +42,9 @@ export async function POST(req: Request) {
       "- Estilo de resposta: Direto, prático e motivador (pouco tempo disponível no dia a dia).\n\n" +
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
-    // Alterado para 'gemini-2.5-flash'
+    // Ajustado para o modelo v1.5 oficial
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-1.5-flash',
       systemInstruction: systemInstruction,
     });
 
