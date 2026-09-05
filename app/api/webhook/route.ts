@@ -1,12 +1,28 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 
+// ID exato do seu grupo "Acompanhamento Fitness"
+const ALLOWED_GROUP_ID = '120363408558611091@g.us';
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
 
     if (!body || body.event !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored_not_upsert' });
+    }
+
+    const remoteJid = body.data?.key?.remoteJid || '';
+
+    // TRAVA 1: Ignora qualquer mensagem que não venha de um grupo
+    if (!remoteJid.endsWith('@g.us')) {
+      return NextResponse.json({ status: 'ignored_private_chat' });
+    }
+
+    // TRAVA 2: Responde apenas se for no seu grupo específico "Acompanhamento Fitness"
+    // (Caso queira permitir qualquer grupo que você criar no futuro, comente a condição abaixo)
+    if (remoteJid !== ALLOWED_GROUP_ID) {
+      return NextResponse.json({ status: 'ignored_unauthorized_group' });
     }
 
     const userMessage = body.data?.message?.conversation || 
@@ -16,9 +32,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_text_content' });
     }
 
-    const remoteJid = body.data?.key?.remoteJid || '';
-
-    // Permite que o bot responda se a mensagem vier de você mesmo ou de um grupo seu
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) {
       return NextResponse.json({ error: 'GEMINI_API_KEY_MISSING' }, { status: 200 });
@@ -65,7 +78,7 @@ export async function POST(req: Request) {
       await axios.post(
         targetUrl,
         {
-          number: remoteJid, // Envia de volta para o próprio ID da conversa ou grupo
+          number: remoteJid, // Envia estritamente para o ID do grupo autorizado
           text: botResponse,
         },
         {
