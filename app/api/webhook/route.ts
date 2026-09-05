@@ -26,7 +26,6 @@ export async function POST(req: Request) {
     const remoteJid = body.data?.key?.remoteJid || '';
     const cleanNumber = remoteJid.replace(/[^0-9]/g, '');
 
-    // Validação da API Key do Gemini
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) {
       return NextResponse.json({ error: 'GEMINI_API_KEY_MISSING' }, { status: 200 });
@@ -43,9 +42,9 @@ export async function POST(req: Request) {
       "- Estilo de resposta: Direto, prático e motivador (pouco tempo disponível no dia a dia).\n\n" +
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
-    // Altere esta linha no arquivo
+    // Alterado para 'gemini-2.5-flash'
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash-latest',
+      model: 'gemini-2.5-flash',
       systemInstruction: systemInstruction,
     });
 
@@ -79,7 +78,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'success', geminiResponse: botResponse });
 
   } catch (error: any) {
-    // Retorna o texto exato da exceção para visualizarmos diretamente no PowerShell
     return NextResponse.json({ 
       error_captured: true,
       message: error?.message || 'Erro desconhecido',
