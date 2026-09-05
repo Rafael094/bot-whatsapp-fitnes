@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 
-// ID exato do seu grupo "Acompanhamento Fitness"
-const ALLOWED_GROUP_ID = '120363408558611091@g.us';
-
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
@@ -13,16 +10,13 @@ export async function POST(req: Request) {
     }
 
     const remoteJid = body.data?.key?.remoteJid || '';
+    
+    // LOG RELEVANTE: Imprime o ID exato de onde veio a mensagem
+    console.log('>>> ID DO CHAT RECEBIDO:', remoteJid);
 
-    // TRAVA 1: Ignora qualquer mensagem que não venha de um grupo
+    // Trava temporária: aceita qualquer grupo terminado em @g.us
     if (!remoteJid.endsWith('@g.us')) {
       return NextResponse.json({ status: 'ignored_private_chat' });
-    }
-
-    // TRAVA 2: Responde apenas se for no seu grupo específico "Acompanhamento Fitness"
-    // (Caso queira permitir qualquer grupo que você criar no futuro, comente a condição abaixo)
-    if (remoteJid !== ALLOWED_GROUP_ID) {
-      return NextResponse.json({ status: 'ignored_unauthorized_group' });
     }
 
     const userMessage = body.data?.message?.conversation || 
@@ -78,7 +72,7 @@ export async function POST(req: Request) {
       await axios.post(
         targetUrl,
         {
-          number: remoteJid, // Envia estritamente para o ID do grupo autorizado
+          number: remoteJid,
           text: botResponse,
         },
         {
