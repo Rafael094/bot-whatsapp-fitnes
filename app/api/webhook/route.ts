@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 
 export async function POST(req: Request) {
@@ -31,25 +30,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'GEMINI_API_KEY_MISSING' }, { status: 200 });
     }
 
-    const genAI = new GoogleGenerativeAI(geminiKey);
-
     const systemInstruction = "Você é um assistente pessoal de rotina fitness e nutrição focado no acompanhamento diário.\n" +
       "Perfil do usuário:\n" +
       "- Foco: Perda de gordura e ganho de massa muscular.\n" +
       "- Metas diárias: 3,5L de água e 160g de proteína.\n" +
       "- Treinos: 30 min (3x/semana).\n" +
-      "- Atenção: Uso de medicação que reduz o apetite (Venvanse); garanta o aporte proteico e hídrico mesmo sem fome.\n" +
-      "- Estilo de resposta: Direto, prático e motivador (pouco tempo disponível no dia a dia).\n\n" +
+      "- Estilo de resposta: Direto, prático e motivador.\n\n" +
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
-    // Modelo atualizado para gemini-1.5-pro
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-pro',
-      systemInstruction: systemInstruction,
+    // Chamada HTTP direta para a API v1beta do Gemini
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+
+    const geminiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: systemInstruction }]
+        },
+        contents: [{
+          parts: [{ text: userMessage }]
+        }]
+      })
     });
 
-    const result = await model.generateContent(userMessage);
-    const botResponse = result.response.text();
+    const geminiData = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      return NextResponse.json({ 
+        error_captured: true, 
+        message: geminiData?.error?.message || 'Erro na API do Gemini',
+        details: geminiData 
+      }, { status: 200 });
+    }
+
+    const botResponse = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta gerada.';
 
     let baseUrl = process.env.EVOLUTION_API_URL || '';
     if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
