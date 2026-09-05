@@ -39,7 +39,8 @@ export async function POST(req: Request) {
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
     // Chamada HTTP direta para a API v1beta do Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+   // Atualizado para gemini-3.6-flash
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`;
 
     const geminiResponse = await fetch(geminiUrl, {
       method: 'POST',
