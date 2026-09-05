@@ -3,13 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
@@ -33,9 +26,13 @@ export async function POST(req: Request) {
     const remoteJid = body.data?.key?.remoteJid || '';
     const cleanNumber = remoteJid.replace(/[^0-9]/g, '');
 
-    if (!cleanNumber) {
-      return NextResponse.json({ status: 'no_valid_number' });
+    // Validação da API Key do Gemini
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY_MISSING' }, { status: 200 });
     }
+
+    const genAI = new GoogleGenerativeAI(geminiKey);
 
     const systemInstruction = "Você é um assistente pessoal de rotina fitness e nutrição focado no acompanhamento diário.\n" +
       "Perfil do usuário:\n" +
@@ -74,13 +71,18 @@ export async function POST(req: Request) {
           },
         }
       ).catch((err) => {
-        console.error('Erro ao enviar mensagem via Evolution API:', err?.response?.data || err.message);
+        console.error('Erro na Evolution API:', err?.response?.data || err.message);
       });
     }
 
-    return NextResponse.json({ status: 'success', response: botResponse });
+    return NextResponse.json({ status: 'success', geminiResponse: botResponse });
+
   } catch (error: any) {
-    console.error('Erro detalhado no Webhook:', error?.message || error);
-    return NextResponse.json({ error: error?.message || 'Internal Error' }, { status: 500 });
+    // Retorna o texto exato da exceção para visualizarmos diretamente no PowerShell
+    return NextResponse.json({ 
+      error_captured: true,
+      message: error?.message || 'Erro desconhecido',
+      stack: error?.stack || null 
+    }, { status: 200 });
   }
 }
