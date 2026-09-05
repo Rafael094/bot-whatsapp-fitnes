@@ -4,17 +4,17 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
 
-    if (body.event !== 'messages.upsert') {
+    if (!body || body.event !== 'messages.upsert') {
       return NextResponse.json({ status: 'ignored_not_upsert' });
     }
 
@@ -26,16 +26,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_text_content' });
     }
 
-    // Trava de segurança: responde apenas a mensagens que você enviou
     if (!isFromMe) {
       return NextResponse.json({ status: 'ignored_third_party_message' });
     }
 
     const remoteJid = body.data?.key?.remoteJid || '';
-    // Limpa o número removendo sufixos (@s.whatsapp.net, @lid, etc.) e caracteres não numéricos
-    const cleanNumber = remoteJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+    const cleanNumber = remoteJid.replace(/[^0-9]/g, '');
 
-    console.log(`Mensagem recebida de (${cleanNumber}): "${userMessage}"`);
+    if (!cleanNumber) {
+      return NextResponse.json({ status: 'no_valid_number' });
+    }
 
     const systemInstruction = "Você é um assistente pessoal de rotina fitness e nutrição focado no acompanhamento diário.\n" +
       "Perfil do usuário:\n" +
@@ -54,36 +54,33 @@ export async function POST(req: Request) {
     const result = await model.generateContent(userMessage);
     const botResponse = result.response.text();
 
-    console.log(`Resposta gerada pelo Gemini: "${botResponse}"`);
-
-    // Garante a presença do protocolo https:// na URL da Evolution API
     let baseUrl = process.env.EVOLUTION_API_URL || '';
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
       baseUrl = `https://${baseUrl}`;
     }
 
     const targetUrl = `${baseUrl.replace(/\/$/, '')}/message/sendText/${process.env.EVOLUTION_INSTANCE_NAME}`;
 
-    console.log(`Disparando resposta para Evolution API em: ${targetUrl}`);
-
-    const apiResponse = await axios.post(
-      targetUrl,
-      {
-        number: cleanNumber,
-        text: botResponse,
-      },
-      {
-        headers: {
-          apikey: process.env.EVOLUTION_API_KEY,
+    if (process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY) {
+      await axios.post(
+        targetUrl,
+        {
+          number: cleanNumber,
+          text: botResponse,
         },
-      }
-    );
+        {
+          headers: {
+            apikey: process.env.EVOLUTION_API_KEY,
+          },
+        }
+      ).catch((err) => {
+        console.error('Erro ao enviar mensagem via Evolution API:', err?.response?.data || err.message);
+      });
+    }
 
-    console.log('Resposta da Evolution API:', apiResponse.data);
-
-    return NextResponse.json({ status: 'success' });
+    return NextResponse.json({ status: 'success', response: botResponse });
   } catch (error: any) {
-    console.error('Erro detalhado no Webhook:', error?.response?.data || error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Erro detalhado no Webhook:', error?.message || error);
+    return NextResponse.json({ error: error?.message || 'Internal Error' }, { status: 500 });
   }
 }
