@@ -26,13 +26,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_text_content' });
     }
 
-    // Trava de segurança: responde estritamente às mensagens enviadas por você
+    // Trava de segurança: responde apenas a mensagens que você enviou
     if (!isFromMe) {
       return NextResponse.json({ status: 'ignored_third_party_message' });
     }
 
     const remoteJid = body.data?.key?.remoteJid || '';
-    const cleanNumber = remoteJid.split('@')[0];
+    // Limpa o número removendo sufixos (@s.whatsapp.net, @lid, etc.) e caracteres não numéricos
+    const cleanNumber = remoteJid.split('@')[0].split(':')[0].replace(/\D/g, '');
+
+    console.log(`Mensagem recebida de (${cleanNumber}): "${userMessage}"`);
 
     const systemInstruction = "Você é um assistente pessoal de rotina fitness e nutrição focado no acompanhamento diário.\n" +
       "Perfil do usuário:\n" +
@@ -44,16 +47,26 @@ export async function POST(req: Request) {
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
     const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-  systemInstruction: systemInstruction,
-});
+      model: 'gemini-1.5-flash',
+      systemInstruction: systemInstruction,
+    });
 
     const result = await model.generateContent(userMessage);
     const botResponse = result.response.text();
 
-    const targetUrl = `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE_NAME}`;
+    console.log(`Resposta gerada pelo Gemini: "${botResponse}"`);
 
-    await axios.post(
+    // Garante a presença do protocolo https:// na URL da Evolution API
+    let baseUrl = process.env.EVOLUTION_API_URL || '';
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = `https://${baseUrl}`;
+    }
+
+    const targetUrl = `${baseUrl.replace(/\/$/, '')}/message/sendText/${process.env.EVOLUTION_INSTANCE_NAME}`;
+
+    console.log(`Disparando resposta para Evolution API em: ${targetUrl}`);
+
+    const apiResponse = await axios.post(
       targetUrl,
       {
         number: cleanNumber,
@@ -65,6 +78,8 @@ export async function POST(req: Request) {
         },
       }
     );
+
+    console.log('Resposta da Evolution API:', apiResponse.data);
 
     return NextResponse.json({ status: 'success' });
   } catch (error: any) {
