@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 
 export async function POST(req: Request) {
@@ -10,7 +9,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored_not_upsert' });
     }
 
-    const isFromMe = body.data?.key?.fromMe;
     const userMessage = body.data?.message?.conversation || 
                        body.data?.message?.extendedTextMessage?.text;
 
@@ -18,13 +16,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'no_text_content' });
     }
 
-    if (!isFromMe) {
-      return NextResponse.json({ status: 'ignored_third_party_message' });
-    }
-
     const remoteJid = body.data?.key?.remoteJid || '';
-    const cleanNumber = remoteJid.replace(/[^0-9]/g, '');
 
+    // Permite que o bot responda se a mensagem vier de você mesmo ou de um grupo seu
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) {
       return NextResponse.json({ error: 'GEMINI_API_KEY_MISSING' }, { status: 200 });
@@ -38,20 +32,14 @@ export async function POST(req: Request) {
       "- Estilo de resposta: Direto, prático e motivador.\n\n" +
       "Sua tarefa: Responder ao usuário e extrair dados se ele informar consumo de refeição, água, peso ou treino.";
 
-    // Chamada HTTP direta para a API v1beta do Gemini
-   // Atualizado para gemini-3.6-flash
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`;
 
     const geminiResponse = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: systemInstruction }]
-        },
-        contents: [{
-          parts: [{ text: userMessage }]
-        }]
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ parts: [{ text: userMessage }] }]
       })
     });
 
@@ -60,8 +48,7 @@ export async function POST(req: Request) {
     if (!geminiResponse.ok) {
       return NextResponse.json({ 
         error_captured: true, 
-        message: geminiData?.error?.message || 'Erro na API do Gemini',
-        details: geminiData 
+        message: geminiData?.error?.message || 'Erro na API do Gemini'
       }, { status: 200 });
     }
 
@@ -78,13 +65,11 @@ export async function POST(req: Request) {
       await axios.post(
         targetUrl,
         {
-          number: cleanNumber,
+          number: remoteJid, // Envia de volta para o próprio ID da conversa ou grupo
           text: botResponse,
         },
         {
-          headers: {
-            apikey: process.env.EVOLUTION_API_KEY,
-          },
+          headers: { apikey: process.env.EVOLUTION_API_KEY },
         }
       ).catch((err) => {
         console.error('Erro na Evolution API:', err?.response?.data || err.message);
@@ -96,8 +81,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     return NextResponse.json({ 
       error_captured: true,
-      message: error?.message || 'Erro desconhecido',
-      stack: error?.stack || null 
+      message: error?.message || 'Erro desconhecido'
     }, { status: 200 });
   }
 }
